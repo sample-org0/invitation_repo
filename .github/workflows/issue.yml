@@ -1,0 +1,59 @@
+name: Monitor Organization Invitations
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+jobs:
+  check-new-members:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Fetch current organization members
+        run: |
+          curl -s -H "Authorization: token ${{ secrets.GH_ADMIN_TOKEN }}" \
+            https://api.github.com/orgs/sample-org0/members \
+            | jq -r '.[].login' > current_members.txt
+
+      - name: Prepare previous member list
+        run: |
+          if [ -f previous_members.txt ]; then
+            echo "Found previous list."
+          else
+            echo "Creating new list."
+            touch previous_members.txt
+          fi
+
+      - name: Compare current vs previous members
+        id: compare
+        run: |
+          NEW_MEMBERS=$(comm -13 <(sort previous_members.txt) <(sort current_members.txt))
+          echo "$NEW_MEMBERS" > new_members.txt
+          echo "new_members=$(cat new_members.txt | tr '\n' ',' | sed 's/,$//')" >> $GITHUB_OUTPUT
+
+      - name: Create issue for each new member
+        if: steps.compare.outputs.new_members != ''
+        run: |
+          for user in $(cat new_members.txt); do
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GH_ADMIN_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              https://api.github.com/repos/sample-org0/invitation-repo/issues \
+              -d @- <<EOF
+# {
+#   "title": "New member joined: $user",
+#   "body": "## Summary\nUser **$user** has accepted the organization invitation.\n\n## Description\nThe user \`$user\` successfully accepted the invite and is now a member of the organization."
+# }
+# EOF
+#           done
+
+#       - name: Save current members list
+#         run: |
+#           mv current_members.txt previous_members.txt
+#           git config user.name github-actions
+#           git config user.email github-actions@users.noreply.github.com
+#           git add previous_members.txt
+#           git commit -m "Update member list" || echo "No changes to commit"
+#           git push
