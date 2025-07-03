@@ -1,15 +1,25 @@
 name: Create Issue on Org Member
-
+ 
 on:
   repository_dispatch:
     types: [org-member-added]
-
+ 
 jobs:
   create-issue:
     runs-on: ubuntu-latest
     steps:
       - name: Create GitHub Issue
-        uses: peter-evans/create-issue@v4
+        uses: actions/github-script@v7
         with:
-          title: ${{ github.event.client_payload.title || 'New Member Joined' }}
-          body: ${{ github.event.client_payload.body || 'No description provided.' }}
+          script: |
+            const title = process.env.ISSUE_TITLE || 'New Member Joined';
+            const body = process.env.ISSUE_BODY || 'No description provided.';
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body
+            });
+        env:
+          ISSUE_TITLE: ${{ github.event.client_payload.title }}
+          ISSUE_BODY: ${{ github.event.client_payload.body }}
